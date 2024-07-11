@@ -53,7 +53,7 @@ I ended up going with a division of 4. Each consecutive step must have the frame
 #### What to publish?
 With TouchGFX evicted from our code, we don’t have a way to fill up our frame buffer. I wrote an “GenerateImage” function that will solve that problem and fill up the frame buffer for us with various different patterns. It is possible to choose currently between 5 different patterns (see code, just uncomment the one that you fancy). I picked these five since my experience suggests that they are especially useful for debugging screen timing problems, something that will likely come around once we start to play around with speeding things up. Using a very complex pattern is bad practice for those kind of debugging sections since it prevents us for having a well-educated guess of where the timing goes off.
 
-## ILI
+### ILI
 Using simple patterns, it is extremely likely that one will be able to see a desired outcome on the screen without any investigation of the ILI. Unfortunately, when are interested in publishing camera output on a screen, every pixel must go to its exact place, otherwise we will end up with torn image, a rolling image or nothing at all.
 
 This means that we will have to load up our frame buffer exactly the same way how we are publishing it.
