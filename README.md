@@ -88,3 +88,13 @@ There is one more input we must provide the OV7670 and that is the MCLK or “ma
 Once the I2C and the master clock is set (plus we provided power and ground), the camera will be ready to start publishing its images as 30fps or 60 fps, depending on the setup and the master clock frequency. Of note, we should refresh the frame buffer with the same speed as we read out from it otherwise, we can have may get two images fused together. This will become important in later projects, here – since we are as slow as possible – the issue will not be apparent.
 
 We will have 8 data lines as output, plus VSYNCH, HSYNCH and PIXCLK. PIXCLK will be the pixel clock, the frequency at which a pixel (well, half-pixel, see below) leaves the camera. It is extremely important to have a good grip on this signal since this will be the one that times our DCMI serial interface of the MCU. VSYNCH and HSYNCH are vertical and horizontal synch signals, defining the end of a frame and the end of a line, respectively. Their “activity state” can be flipped within the setup of the camera. It is very important to match their profile with the DCMI interface, otherwise no data will be captured (for instance, VSYNCH will be active HIGH for both the camera and the interface in our case). Lastly, we will have the 8 data lines, which will be publishing 16-bit RGB565 image format, as set by our camera command matrix. That means that one pixel will take two PIXCLK to be sent to over to the MCU with the MSB byte consisting of RRRRRGGG and the LSB byte GGGBBBBB. Yet again, I need to mention that the capture sequence of the pixels must match the publishing sequence of the pixels for a properly coloured output. It is perfectly possible to swap the LSB and the MSB bytes by flipping some of the control bits in the DCMI interface of the camera, leading to some rather interestingly coloured images...
+
+### DCMI
+Lorem-ipsum.
+
+## User guide
+Lorem-ipsum.
+
+## Conclusion
+Lorem-ipsum.
+
