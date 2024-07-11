@@ -17,7 +17,7 @@ Fourth, we can hook up our CMOS camera using the DCMI+DMA interface of the STM32
 Buckle up, because this will be a complex one and I will skip some steps. I will indicate though which overlapping project allows me to do so. 
 
 ## Nose to the grindstone 
-###L0xx vs F4xx
+### L0xx vs F4xx
 Before all these points above, in Zero-th(?) position, we will have to talk about the differences between the MCU we have in our DISCO board (F429) and the NUCLEO board (L053) of other projects. Generally, it can be said that there is a high level of compatibility between STM32 MCUs regarding code, especially if one decides to use HAL.
 
 When doing bare metal, this isn’t the case. Many times, a few registers’ names are changed, meaning that porting of existing code would not work at all without minimal modifications. In other cases, the peripherals might be completely different and would demand rewriting of existing drivers.
@@ -28,7 +28,7 @@ In our case, there are four glaring differences between the L0xx and the F4xx:
 3)	We have a significantly more advanced DMA on the F429 with a lot more channels/streams than on the L0xx. I won’t go into this; it is not complicated to make heads or tails of it using the refman of the F429. The STM32_DMADriver project can be of help.
 4)	GPIO MODER register resets to 0x0, not 0xFF.
 
-###I2C on the F429
+### I2C on the F429
 Unlike in the L053 where we could rely on a lot of automation within the peripheral (such as using AUTOEND to generate a stop bit, or using different registers for Tx/Rx, or publish the slave address in CR2, or flip a bit in the CR1 register to flush our Tx, or have ACK automatically), we will need to do almost everything manually. We need to write functions that generate start/stop bits, one to send the slave address and one to send data.
 
 The start/stop generating functions are rather straight forwards, we merely need to set a bit in the CR1 register and wait for a flag to go HIGH indicating success. Mind, within the start condition, it is also necessary to enable the master’s acknowledge towards the slave.
@@ -40,7 +40,7 @@ Timing is done by defining the driving frequency of the peripheral (APB1 periphe
 
 Of note, we clean the flags within the peripheral by reading the SR registers. Doing so does clean ALL flags, so tread lightly and not accidentally remove flags that should not be cleaned.
 
-###Where to TouchGFX?
+### Where to TouchGFX?
 Investigating the base project, we can see that TouchGFX interfaces with the screen through the ILI driver. More precisely, it calls “ILI9341_SetWindow(x, y, x+w-1, y+h-1)” to set the window we will be writing to on the screen and then the “ILI9341_DrawBitmap(w, h, pixels);” to actually “fill” that window with a bitmap (i.e., with an image). Unfortunately, the width, the height and the pixel pointer (as well as the frame buffer!) for that call are all set up within TouchGFX, so we will have to do it manually to remove TouchGFX. Checking the “ILI9341.c”, setting the window is just a set of commands (what they are, see below), nothing complicated. For drawing the bitmap, we are using the memory stepping within the DMA of the SPI. As such, if we manage to generate a frame buffer ourselves, add a pointer to it and define the proper height/width, everything should be fine.
 
 As mentioned in the base project description, we have a bit of a memory allocation problem where, if we have TouchGFX active, we can’t store an entire image within RAM due to lack of space (we will have at least 70 kB of the 196kB memory used up in RAM without doing anything…while an image is 150 kB). TouchGFX gets around this by using/generating smaller memory frame buffers and then “reconstruct” the image, section by section, which is a pretty efficient way to save memory and sacrifice speed. I do want to have speed eventually…plus, if we don’t use TouchGFX, we can store the entire image in RAM. You see where I am getting to…
@@ -50,10 +50,10 @@ So, if no TouchGFX, we can simply define our frame buffer as a variable (an arra
 …except that it won’t. DMA’s need to know, how many elements they should transfer ahead of the transfer…and the register to define the number of transfers is capped at 65k (the register is 16-bits wide). As such, we can’t transfer our image in one fell swoop to the screen using the DMA since each transfer has to be 8 bits to comply the SPI. Our custom image transfer function to remove TouchGFX this has to also do the transfer in sections (see the function “Transmit320x240Frame” in the “image_transfer” source file).
 I ended up going with a division of 4. Each consecutive step must have the frame buffer pointer manually set to the next step with the window set accordingly. Since we are using DMA for the transfer and we aren’t blocking, we need to also add a delay between the sections, otherwise we will have overrunning of the data.
 
-####What to publish?
+#### What to publish?
 With TouchGFX evicted from our code, we don’t have a way to fill up our frame buffer. I wrote an “GenerateImage” function that will solve that problem and fill up the frame buffer for us with various different patterns. It is possible to choose currently between 5 different patterns (see code, just uncomment the one that you fancy). I picked these five since my experience suggests that they are especially useful for debugging screen timing problems, something that will likely come around once we start to play around with speeding things up. Using a very complex pattern is bad practice for those kind of debugging sections since it prevents us for having a well-educated guess of where the timing goes off.
 
-##ILI
+## ILI
 Using simple patterns, it is extremely likely that one will be able to see a desired outcome on the screen without any investigation of the ILI. Unfortunately, when are interested in publishing camera output on a screen, every pixel must go to its exact place, otherwise we will end up with torn image, a rolling image or nothing at all.
 
 This means that we will have to load up our frame buffer exactly the same way how we are publishing it.
