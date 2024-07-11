@@ -17,7 +17,7 @@ Fourth, we can hook up our CMOS camera using the DCMI+DMA interface of the STM32
 Buckle up, because this will be a complex one and I will skip some steps. I will indicate though which overlapping project allows me to do so. 
 
 ## Nose to the grindstone 
-### L0xx vs F4xx
+### L053 vs F429
 Before all these points above, in Zero-th(?) position, we will have to talk about the differences between the MCU we have in our DISCO board (F429) and the NUCLEO board (L053) of other projects. Generally, it can be said that there is a high level of compatibility between STM32 MCUs regarding code, especially if one decides to use HAL.
 
 When doing bare metal, this isn’t the case. Many times, a few registers’ names are changed, meaning that porting of existing code would not work at all without minimal modifications. In other cases, the peripherals might be completely different and would demand rewriting of existing drivers.
