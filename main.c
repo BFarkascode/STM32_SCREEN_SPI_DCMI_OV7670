@@ -6,7 +6,10 @@
  *  Compiler: ARM-GCC (STM32 IDE)
  *  Program version: 1.0
  *  File: main.c
- *  Hardware description/pin distribution: I2C pins on PB8 and PB9
+ *  Hardware description/pin distribution: 	I2C pins on PB6 and PB7
+ *						camera master clock on PA7
+ *      					DCMI pins on PA4, PA6,PB8,PB9,PC6,PC7,PC8,PC9,PC11,PD3 and PG9
+ *	     					screen SPI on PF7,PF8 an PF9, CS on PC2, DC pin on PD13
  *  Change history: N/A
   ******************************************************************************
   * @file           : main.c
@@ -127,15 +130,12 @@ int main(void)
 
   //---------Set up camera----------//
 
-#ifdef direct_cam_drive
-
   OV7670_Clock_Start();
 
   OV7670_Find();
 
   OV7670_init();
 
-#endif
 
   //---------Set up camera----------//
 
