@@ -75,27 +75,29 @@ The OV7670 is a cheap CMOS camera that was very popular a few years ago. It has 
 
 After the initialization commands have been sent, the camera can be put into automatic mode where it will publish images on a continuous basis which is perfect for our application.
 
-Of note, I took the command matrix from the Adafruit OV7670 project frot his camera and used it without any modifications. This I highly recommend as well since, unlike the ILI where “trimming the fat” is possible, experience suggests that mucking around with the registers of the camera (any camera for that matter) can lead to adverse effects very easily. There are also unknown registers that must be set, but nobody seems to know, why exactly (no info of them in the datasheet, but if removed, prepare for a bad time). In order to have a good image quality and an enjoyable output, it is simply necessary to use an available existing init matrix.
+Of note, I took the command matrix from the Adafruit OV7670 project for this camera and used it without any modifications. This I highly recommend as well since, unlike the ILI where “trimming the fat” is possible, experience suggests that mucking around with the registers of the camera (any camera for that matter) can lead to adverse effects very easily. There are also unknown registers that must be set, but nobody seems to know, why exactly (no info of them in the datasheet, but if removed, prepare for a bad time). In order to have a good image quality and an enjoyable output, it is simply necessary to use an available existing init matrix.
 
 There is one more input we must provide to the OV7670: the MCLK or “master clock”. This master clock is used by the camera to run itself and must be of specific frequencies, otherwise the camera will refuse to work. The recommended value is 24 MHz, though here I managed to make it work at 12 MHz as well. I am providing the clocking using our a 50% duty cycle PWM pulse from our MCU (check the ClockDriver project).
 
 Once the I2C and the master clock is set (plus we provided power and ground), the camera will be ready to start publishing its images at 30fps or 60 fps, depending on the resolution setup and the master clock frequency.
 
-We will have 8 data lines as output, plus VSYNCH, HSYNCH and PIXCLK. PIXCLK will be the pixel clock, the frequency at which a pixel (well, half-pixel) leaves the camera. It is extremely important to have a good grip on this signal since this will be the one that times the DCMI serial interface of the MCU. VSYNCH and HSYNCH are vertical and horizontal synch signals, defining the end of a frame and the end of a line, respectively. Their “activity state” can be flipped within the setup of the camera. It is very important to match their profile with the DCMI interface, otherwise no data will be captured (for instance, VSYNCH will be active HIGH for both the camera and the interface in our particular case, some cameras might demand another setup or be flexible).
+We will have 11 output lines altogether, three of them called VSYNCH, HSYNCH and PIXCLK. PIXCLK will be the pixel clock, the frequency at which a pixel (well, half-pixel) leaves the camera. It is extremely important to have a good grip on this signal since this will be the one that times the DCMI serial interface of the MCU. VSYNCH and HSYNCH are vertical and horizontal synch signals, defining the end of a frame and the end of a line, respectively. Their “activity state” can be flipped within the setup of the camera. It is very important to match their profile with the DCMI interface, otherwise no data will be captured (for instance, VSYNCH will be active HIGH for both the camera and the interface in our particular case, some cameras might demand another setup or be flexible).
 
-Lastly, we will have the 8 data lines, which will be publishing 16-bit RGB565 image format, as set by our camera command matrix. That means that one pixel will take two PIXCLK to be sent to over to the MCU with the MSB byte consisting of RRRRRGGG and the LSB byte GGGBBBBB. Yet again, I need to mention that the capture sequence of the pixels must match the publishing sequence of the pixels for a properly coloured output. It is perfectly possible to swap the LSB and the MSB bytes by flipping some of the control bits in the DCMI interface of the camera, leading to some rather interestingly coloured images...
+Lastly, we will have the 8 data output lines, publishing 16-bit RGB565 image format, as set by our camera command matrix. It will take two PIXCLK to be send over a full pixel, the MSB byte consisting of RRRRRGGG and the LSB byte GGGBBBBB. I need to mention here again that the capture sequence of the pixels must match the publishing sequence of the pixels for a properly coloured output.
 
 ### DCMI
-DCMI stands for Digital Camera Interface. It is an in-built serial interface peripheral that allows us to capture incoming data in parallel. That is good news since MCUs are not capable of real parallel activities like FPGAs do, meaning that any incoming data would need to be captured sequentially (just an example, without DCMI, the 24 MHz 8-bit parallel output would need to be captured at a frequency of 8x24 = 192 MHz to avoid data loss).
+DCMI stands for Digital Camera Interface. It is ST's in-built serial interface peripheral that allows us to capture incoming data in parallel. That is good news since MCUs are not capable of real parallel activities like FPGAs do, meaning that any incoming data would need to be captured sequentially. Just an example, without DCMI, the 24 MHz 8-bit parallel output would need to be captured at a frequency of 8x24 = 192 MHz to avoid data loss, not possible with lower and MCUs such as the F4xx series.
 
-The DCMI peripheral samples the incoming data on the edge of its own internal clock (AHB2 bus) and being triggered to do so on the edge of the PIXCLK – i.e., the refresh rate of the incoming data flow. It loads a 32-bit data register which, when full, triggers a DMA request (DMA Stream 1, channel 1, see datasheet and refman). As such, the DCMI will not be able to run unless a DMA is set in parallel with it.
+The DCMI peripheral samples the incoming data on the edge of its own internal clock (connected to the AHB2 bus) and triggered on the edge of the PIXCLK – i.e., the refresh rate of the incoming data flow. It loads a 32-bit data register which, when full, calls a DMA request (DMA Stream 1, channel 1, see datasheet and refman). The DCMI will not be able to run unless a DMA is set up in parallel with it.
 
-Luckily, we won’t be plagued by the DMA limitations here since, unlike with the SPI’s 8-bit width, we will have a width of 32 bits for the DMA. This means that the maximum number of bytes we can transfer without sectioning is 65535 * 4 = 262140 bytes, way above the image size.
+Luckily, we won’t be plagued by the same DMA limitations as before since, unlike with the SPI’s 8-bit width, we will have a width of 32 bits to feed the DMA. This means that the maximum number of bytes we can transfer without sectioning is 65535 * 4 = 262140 bytes, comfortably above the designated image size.
 
-All in all, the DCMI is a rather straightforward peripheral with only a few registers to manipulate. The only thing to mention is that we aren’t going into embedded control, we are relying on the camera to drive the interface with its synch signals and pixel clock.
+We will be relying on the camera to drive this interface with its synch signals and pixel clock (external synch option for the DCMI).
 
 ## User guide
-The project is VERY noise sensitive: the image easily falls apart, colours going flipped and so on. It is highly recommended to produce a custom adapter PCB to attach the camera directly to the DISCO board, thus decreasing the noise. Having short cables to attach the camera to the DISCO also helps, albeit that can be tricky when one has to manage more than a dozen cables at the same time. (The reason for the noise is that simple jumper cables become unreliable above frequencies of 10 MHz in case their length is greater than 10 cm. Here we will be working with 24 MHz signals eventually, so go figures...)
+CAUTION! The project is VERY noise sensitive! The image easily falls apart, colours flipped and so on. It is highly recommended to produce a custom adapter PCB to attach the camera directly to the DISCO board, thus decreasing this noise. Having short cables to attach the camera to the DISCO also helps a lot, albeit that can be tricky when one has to manage more than a dozen cables at the same time. (Of note, the reason for the noise is that simple jumper cables become unreliable above frequencies of 10 MHz in case their length is greater than 10 cm. Here we will be working with 24 MHz signals eventually, so go figures...)
+
+Commenting in/out sections in the “main” allows different outputs to emerge on the screen, be that a pattern or the camera’s data.
 
 ### Project architecture
 Just to give an overview:
@@ -107,29 +109,25 @@ Just to give an overview:
 6) We extract the data from the frame buffer using DMA
 7) We send the data to the screen using SPI
 
-All in all, commenting in/out sections in the “main” allows different outputs to emerge on the screen, be that a pattern or the camera’s data.
-
 ### I2C on the F429
-Unlike in the L053 where we could rely on a lot of automation within the peripheral (such as using AUTOEND to generate a stop bit, or using different registers for Tx/Rx, or publish the slave address in CR2, or flip a bit in the CR1 register to flush our Tx, or have ACK automatically), we will need to do almost everything manually. We need to write functions that generate start/stop bits, one to send the slave address and one to send data.
+Unlike in the L053 where we could rely on a lot of automation within the peripheral (such as using AUTOEND to generate a stop bit, or using different registers for Tx/Rx, or publish the slave address in CR2, or flip a bit in the CR1 register to flush our Tx, or have ACK automatically), we will need to do almost everything manually. We need to write functions that generate start/stop bits, to send the slave address and to send data.
 
-The start/stop generating functions are rather straight forwards, we merely need to set a bit in the CR1 register and wait for a flag to go HIGH indicating success. Mind, within the start condition, it is also necessary to enable the master’s acknowledge towards the slave.
+The start/stop generating functions are rather straight forward, we merely need to set a bit in the CR1 register and wait for designated flag to go HIGH indicating success. Mind, within the start condition, it is also necessary to enable the master’s acknowledge towards the slave or we might have issues.
 
-Addressing is done by writing to the DR register – the only data transfer register – after a start condition and waiting for the ADDR bit to go HIGH. The ADDR bit will ONLY go HIGH in case there is match in the address, so it can only be used for timing if we are sure about the address. Also, there is a redundancy with the AF/acknowledge bit (I am not sure, why this makes sense, but it can hard lock the code pretty easily). For scanning the bus for addresses, the ADDR bit MUST NOT be checked for timing, we need to solely use the AF bit (see code).
+Addressing is done by writing to the DR register – the only data transfer register in the peripheral – after a start condition, followed by waiting for the ADDR bit to go HIGH. The ADDR bit will ONLY go HIGH in case there is match in the address, so it can only be used for timing a transfer if we are sure about the slave's address. For scanning the bus for addresses, the ADDR bit MUST NOT be checked for timing, we need to solely use the AF bit (see code).
 
-We pick Tx or Rx by setting the LSB in the address. This also means that we need to shift left (“<<1”) any address before we put it into the DR register. LSB 0 is Tx, LSB 1 is Rx. We will only have Tx here. 
+We pick Tx or Rx by setting the LSB in the address. This also means that we need to shift left (“<<1”) any address before we put it into the DR register. LSB 0 is Tx, LSB 1 is Rx. I only wrote the Tx part. 
 
-Timing is done by defining the driving frequency of the peripheral (APB1 peripheral clock for I2C1) within the CR2 register (must be the same value put as the APB1 frequency in MHz), set the division rate in the CCR register and set the rising time in the TRISE register. The calculations to get the CCR and TRISE are within the refman.
+Timing is done by defining the driving frequency of the peripheral (APB1 peripheral clock for I2C1) within the CR2 register - which must be the same value put as the APB1 frequency in MHz - then setting the division rate in the CCR register and the rising time in the TRISE register. The calculations to get the CCR and TRISE are within the refman.
 
-Of note, we clean the flags within the peripheral by reading the SR registers. Doing so does clean ALL flags, so tread lightly and not accidentally remove flags that should not be cleaned.
+We clean the peripheral's flags by reading the the two SR registers. Doing so cleans ALL flags, so tread lightly not to accidentally remove flags.
 
 ### SPI, DMA, PWM, Clocking
 These peripherals are run on code pretty much identical to the L0xx so I won’t be explaining them. Merely a few register names and bits need to be changed from the original code.
 
-I am handling the data flow of the SPI differently though so that I won’t need to change the existing ILI9341 driver. The difference is that we are publishing single bytes on the SPI bus instead of an array as we did before.
+I am handling the data flow of the SPI differently where we are publishing single bytes on the SPI bus instead of an array as we did before. This is simply to match the existing ILI9341 driver.
 
 ## Conclusion
-As mentioned, we are cutting a lot of corners in this project and aren’t using any of the more advanced functions such as DMA2D or TouchGFX. We also have a myriad of while loops that block execution unnecessarily.
+We are cutting a lot of corners in this project and aren’t using any of the more advanced functions such as DMA2D or TouchGFX to optimise the output. We also have a myriad of while loops that block execution unnecessarily. Nevertheless, the image is captured and published at a frame rate of around 1 fps.
 
-Nevertheless, the image is captured at a frame rate of around 1 fps.
-
-Next step will be to speed everything up to a more comforting 30 fps (or more) by adjusting the timing, removing while loops and adding LTDC driving to the screen.
+Next project in the line will be to speed everything up to a more comforting 30 fps (or more) by adjusting the timing, removing while loops and adding LTDC driving to the screen.
