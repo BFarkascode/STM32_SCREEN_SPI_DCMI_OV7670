@@ -1,6 +1,6 @@
 # STM32_SCREEN_SPI_DCMI_OV7670
 
-Bare metal project on a STM32_F429_DISCO board to extract image from an OV7670 CMOS camera. This is the second project in a sequence of projects.  
+Bare metal project on a STM32_F429_DISCO board to publish image from an OV7670 CMOS camera. This is the second project in a sequence of projects.  
 
 ## General description
 With the base project successfully set up (see STM32_SCREEN_ref_pro project), the next natural step in my engineer mind is to disassemble the project to its core elements and replace everything with custom solutions. Why? Well, that should allow us a lot of flexibility later on when, for instance, we would want to use the LTDC screen driving and the DCMI camera interfacing on our F429 DISCO board at the same time. You see, CubeMX simply doesn’t allow that to happen due to two of the pins overlapping in the F429 DISCO. Manually though, we could just force the solution with minimal data loss (i.e. dropping a DCMI or LTDC pin). Having a custom solution also will allow us to “trim the fat” from the base project further and have something completely bare-bones for the future. Ideal source material for going nuts...by, for instance, slapping a camera to it and building a crude telescope.
