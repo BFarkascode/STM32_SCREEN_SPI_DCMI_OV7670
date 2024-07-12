@@ -127,5 +127,8 @@ Thes peripherals are run on code pretty much identical to the L0xx so I won’t 
 One thing is that, within this code, I am handling the data flow of the SPI differently just so that I won’t need to change the existing ILI9341 driver: we are publishing single bytes on the SPI bus instead of an array as we did in the L0xx project.
 
 ## Conclusion
-As mentioned, we are cutting a lot of corners in this project and aren’t using any of the more advanced functions such as DMA2D or TouchGFX. Nevertheless, the image should be captured at a frame rate of around 1 fps. Next steps will be to speed everything up to a more comforting 30 fps (or more) and potentially add a log function for images…or even video.
+As mentioned, we are cutting a lot of corners in this project and aren’t using any of the more advanced functions such as DMA2D or TouchGFX. We also have a myriad of while loops that block execution unnecessarily.
 
+Nevertheless, the image is captured at a frame rate of around 1 fps.
+
+Next step will be to speed everything up to a more comforting 30 fps (or more) by adjusting the timing, removing while loops and adding LTDC driving to the screen.
