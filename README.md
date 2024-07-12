@@ -98,13 +98,13 @@ All in all, the DCMI is a rather straightforward peripheral with only a few regi
 
 ### Project architecture
 Just to give an overview:
-1)We are driving/commanding a camera using I2C
-2)We clock the camera using PWM
-3)We capture the output of the camera (8-bit serial) using the DCMI peripheral
-4)We log the captured data into a frame buffer placed within the MCU’s RAM using DMA
-5)We command the screen using SPI commands
-6)We extract the data from the frame buffer using DMA
-7)We send the data to the screen using SPI
+1) We are driving/commanding a camera using I2C
+2) We clock the camera using PWM
+3) We capture the output of the camera (8-bit serial) using the DCMI peripheral
+4) We log the captured data into a frame buffer placed within the MCU’s RAM using DMA
+5) We command the screen using SPI commands
+6) We extract the data from the frame buffer using DMA
+7) We send the data to the screen using SPI
 
 All in all, commenting in/out sections in the “main” allows different outputs to emerge on the screen, be that a pattern or the camera’s data.
 
