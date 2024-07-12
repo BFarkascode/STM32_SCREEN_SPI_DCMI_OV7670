@@ -96,6 +96,18 @@ All in all, the DCMI is a rather straightforward peripheral with only a few regi
 
 ## User guide
 
+### Project architecture
+Just to give an overview:
+1)We are driving/commanding a camera using I2C
+2)We clock the camera using PWM
+3)We capture the output of the camera (8-bit serial) using the DCMI peripheral
+4)We log the captured data into a frame buffer placed within the MCU’s RAM using DMA
+5)We command the screen using SPI commands
+6)We extract the data from the frame buffer using DMA
+7)We send the data to the screen using SPI
+
+All in all, commenting in/out sections in the “main” allows different outputs to emerge on the screen, be that a pattern or the camera’s data.
+
 ### I2C on the F429
 Unlike in the L053 where we could rely on a lot of automation within the peripheral (such as using AUTOEND to generate a stop bit, or using different registers for Tx/Rx, or publish the slave address in CR2, or flip a bit in the CR1 register to flush our Tx, or have ACK automatically), we will need to do almost everything manually. We need to write functions that generate start/stop bits, one to send the slave address and one to send data.
 
@@ -104,10 +116,16 @@ The start/stop generating functions are rather straight forwards, we merely need
 Addressing is done by writing to the DR register – the only data transfer register – after a start condition and waiting for the ADDR bit to go HIGH. The ADDR bit will ONLY go HIGH in case there is match in the address, so it can only be used for timing if we are sure about the address. Also, there is a redundancy with the AF/acknowledge bit (I am not sure, why this makes sense, but it can hard lock the code pretty easily). For scanning the bus for addresses, the ADDR bit MUST NOT be checked for timing, we need to solely use the AF bit (see code).
 
 We pick Tx or Rx by setting the LSB in the address. This also means that we need to shift left (“<<1”) any address before we put it into the DR register. LSB 0 is Tx, LSB 1 is Rx. We will only have Tx here. 
+
 Timing is done by defining the driving frequency of the peripheral (APB1 peripheral clock for I2C1) within the CR2 register (must be the same value put as the APB1 frequency in MHz), set the division rate in the CCR register and set the rising time in the TRISE register. The calculations to get the CCR and TRISE are within the refman.
 
 Of note, we clean the flags within the peripheral by reading the SR registers. Doing so does clean ALL flags, so tread lightly and not accidentally remove flags that should not be cleaned.
 
+### SPI, DMA, PWM, Clocking
+Thes peripherals are run on code pretty much identical to the L0xx so I won’t be explaining them too deeply.
+
+One thing is that, within this code, I am handling the data flow of the SPI differently just so that I won’t need to change the existing ILI9341 driver: we are publishing single bytes on the SPI bus instead of an array as we did in the L0xx project.
+
 ## Conclusion
-Lorem-ipsum.
+As mentioned, we are cutting a lot of corners in this project and aren’t using any of the more advanced functions such as DMA2D or TouchGFX. Nevertheless, the image should be captured at a frame rate of around 1 fps. Next steps will be to speed everything up to a more comforting 30 fps (or more) and potentially add a log function for images…or even video.
 
