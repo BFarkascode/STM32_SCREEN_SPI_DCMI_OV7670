@@ -18,8 +18,14 @@ Fourth, we can hook up our CMOS camera using the DCMI+DMA interface of the STM32
 
 Buckle up, because this will be a complex one and I will skip some steps. I will indicate though which overlapping project allows me to do so. 
 
+## Previous relevant projects
+The following projects should be checked:
+- STM32_SPIDriver
+- STM32_ClockDriver
+- STM32_DMADriver
+
 ## To read
-Lorem-ipsum.
+Datasheets/reference manuals for the STM32F4xx MCU family, the ILI9341 screen driver and the OV7670 CMOS camera.
 
 ## Particularities
 
@@ -34,18 +40,6 @@ In our case, there are four glaring differences between the L0xx and the F4xx:
 3)	We have a significantly more advanced DMA on the F429 with a lot more channels/streams than on the L0xx. I won’t go into this; it is not complicated to make heads or tails of it using the refman of the F429. The STM32_DMADriver project can be of help.
 4)	GPIO MODER register resets to 0x0, not 0xFF.
 
-### I2C on the F429
-Unlike in the L053 where we could rely on a lot of automation within the peripheral (such as using AUTOEND to generate a stop bit, or using different registers for Tx/Rx, or publish the slave address in CR2, or flip a bit in the CR1 register to flush our Tx, or have ACK automatically), we will need to do almost everything manually. We need to write functions that generate start/stop bits, one to send the slave address and one to send data.
-
-The start/stop generating functions are rather straight forwards, we merely need to set a bit in the CR1 register and wait for a flag to go HIGH indicating success. Mind, within the start condition, it is also necessary to enable the master’s acknowledge towards the slave.
-
-Addressing is done by writing to the DR register – the only data transfer register – after a start condition and waiting for the ADDR bit to go HIGH. The ADDR bit will ONLY go HIGH in case there is match in the address, so it can only be used for timing if we are sure about the address. Also, there is a redundancy with the AF/acknowledge bit (I am not sure, why this makes sense, but it can hard lock the code pretty easily). For scanning the bus for addresses, the ADDR bit MUST NOT be checked for timing, we need to solely use the AF bit (see code).
-
-We pick Tx or Rx by setting the LSB in the address. This also means that we need to shift left (“<<1”) any address before we put it into the DR register. LSB 0 is Tx, LSB 1 is Rx. We will only have Tx here. 
-Timing is done by defining the driving frequency of the peripheral (APB1 peripheral clock for I2C1) within the CR2 register (must be the same value put as the APB1 frequency in MHz), set the division rate in the CCR register and set the rising time in the TRISE register. The calculations to get the CCR and TRISE are within the refman.
-
-Of note, we clean the flags within the peripheral by reading the SR registers. Doing so does clean ALL flags, so tread lightly and not accidentally remove flags that should not be cleaned.
-
 ### Where to TouchGFX?
 Investigating the base project, we can see that TouchGFX interfaces with the screen through the ILI driver. More precisely, it calls “ILI9341_SetWindow(x, y, x+w-1, y+h-1)” to set the window we will be writing to on the screen and then the “ILI9341_DrawBitmap(w, h, pixels);” to actually “fill” that window with a bitmap (i.e., with an image). Unfortunately, the width, the height and the pixel pointer (as well as the frame buffer!) for that call are all set up within TouchGFX, so we will have to do it manually to remove TouchGFX. Checking the “ILI9341.c”, setting the window is just a set of commands (what they are, see below), nothing complicated. For drawing the bitmap, we are using the memory stepping within the DMA of the SPI. As such, if we manage to generate a frame buffer ourselves, add a pointer to it and define the proper height/width, everything should be fine.
 
@@ -59,7 +53,7 @@ I ended up going with a division of 4. Each consecutive step must have the frame
 #### What to publish?
 With TouchGFX evicted from our code, we don’t have a way to fill up our frame buffer. I wrote an “GenerateImage” function that will solve that problem and fill up the frame buffer for us with various different patterns. It is possible to choose currently between 5 different patterns (see code, just uncomment the one that you fancy). I picked these five since my experience suggests that they are especially useful for debugging screen timing problems, something that will likely come around once we start to play around with speeding things up. Using a very complex pattern is bad practice for those kind of debugging sections since it prevents us for having a well-educated guess of where the timing goes off.
 
-### ILI9341
+### Screen driving
 Using simple patterns, it is extremely likely that one will be able to see a desired outcome on the screen without any investigation of the ILI. Unfortunately, when are interested in publishing camera output on a screen, every pixel must go to its exact place, otherwise we will end up with torn image, a rolling image or nothing at all.
 
 This means that we will have to load up our frame buffer exactly the same way how we are publishing it.
@@ -78,7 +72,7 @@ All in all, the ILI driver we had in the base project had a lot more registers m
 
 Lastly, I need to talk about the command architecture of the ILI. It is commanded using SPI (thanks to the pre-set IM bits) so we have a CS chip select that will have to be controlled using a normal GPIO output in the F429. In the DISCO board, the CS pin is on PC2. We also have the DC pin on the ILI, which is a command input: if it is HIGH, we will be sending it data, if it is LOW, we are sending it a command/register. The DC pin is also a simple GPIO output, connected to PD13 in the DISCO.
 
-### OV7670
+### Camera driving
 The OV7670 is a cheap CMOS camera that was very popular a few years ago. It has a CMOS size of 640x480 and is driven by I2C with a parallel serial interface to publish data. These days, it is mostly replaced by the OV5640, which is practically the same just with 2592x1944 pixels. I will stick with the OV7670 for simplicity’s sake and because this is the one that I have lying around after the DE0 Digicam project. (If anyone is seriously following me on these projects, swapping out the OV7670 should not pose any great difficult, just a bit of annoyance.)
 
 As mentioned, driving/commanding of the camera is through I2C and once the initialization commands have been sent, the camera can be put into automatic mode where it will publish images on a continuous basis.
@@ -92,10 +86,27 @@ Once the I2C and the master clock is set (plus we provided power and ground), th
 We will have 8 data lines as output, plus VSYNCH, HSYNCH and PIXCLK. PIXCLK will be the pixel clock, the frequency at which a pixel (well, half-pixel, see below) leaves the camera. It is extremely important to have a good grip on this signal since this will be the one that times our DCMI serial interface of the MCU. VSYNCH and HSYNCH are vertical and horizontal synch signals, defining the end of a frame and the end of a line, respectively. Their “activity state” can be flipped within the setup of the camera. It is very important to match their profile with the DCMI interface, otherwise no data will be captured (for instance, VSYNCH will be active HIGH for both the camera and the interface in our case). Lastly, we will have the 8 data lines, which will be publishing 16-bit RGB565 image format, as set by our camera command matrix. That means that one pixel will take two PIXCLK to be sent to over to the MCU with the MSB byte consisting of RRRRRGGG and the LSB byte GGGBBBBB. Yet again, I need to mention that the capture sequence of the pixels must match the publishing sequence of the pixels for a properly coloured output. It is perfectly possible to swap the LSB and the MSB bytes by flipping some of the control bits in the DCMI interface of the camera, leading to some rather interestingly coloured images...
 
 ### DCMI
-Lorem-ipsum.
+DCMI stands for Digital Camera Interface. It is an in-built serial interface peripheral that allows us to capture incoming data in parallel. That is good news since MCUs are not capable of real parallel activities like FPGAs do, meaning that any incoming data would need to be captured sequentially (just an example, without DCMI, the 24 MHz 8-bit parallel output would need to be captured at a frequency of 8x24 = 192 MHz to avoid data loss).
+
+The DCMI peripheral samples the incoming data on the edge of its own internal clock (AHB2 bus) and being triggered to do so on the edge of the PIXCLK – i.e., the refresh rate of the incoming data flow. It loads a 32-bit data register which, when full, triggers a DMA request (DMA Stream 1, channel 1, see datasheet and refman). As such, the DCMI will not be able to run unless a DMA is set in parallel with it.
+
+Luckily, we won’t be plagued by the DMA limitations here since, unlike with the SPI’s 8-bit width, we will have a width of 32 bits for the DMA. This means that the maximum number of bytes we can transfer without sectioning is 65535 * 4 = 262140 bytes, way above the image size.
+
+All in all, the DCMI is a rather straightforward peripheral with only a few registers to manipulate. The only thing to mention is that we aren’t going into embedded control, we are relying on the camera to drive the interface with its synch signals and pixel clock.
 
 ## User guide
-Lorem-ipsum.
+
+### I2C on the F429
+Unlike in the L053 where we could rely on a lot of automation within the peripheral (such as using AUTOEND to generate a stop bit, or using different registers for Tx/Rx, or publish the slave address in CR2, or flip a bit in the CR1 register to flush our Tx, or have ACK automatically), we will need to do almost everything manually. We need to write functions that generate start/stop bits, one to send the slave address and one to send data.
+
+The start/stop generating functions are rather straight forwards, we merely need to set a bit in the CR1 register and wait for a flag to go HIGH indicating success. Mind, within the start condition, it is also necessary to enable the master’s acknowledge towards the slave.
+
+Addressing is done by writing to the DR register – the only data transfer register – after a start condition and waiting for the ADDR bit to go HIGH. The ADDR bit will ONLY go HIGH in case there is match in the address, so it can only be used for timing if we are sure about the address. Also, there is a redundancy with the AF/acknowledge bit (I am not sure, why this makes sense, but it can hard lock the code pretty easily). For scanning the bus for addresses, the ADDR bit MUST NOT be checked for timing, we need to solely use the AF bit (see code).
+
+We pick Tx or Rx by setting the LSB in the address. This also means that we need to shift left (“<<1”) any address before we put it into the DR register. LSB 0 is Tx, LSB 1 is Rx. We will only have Tx here. 
+Timing is done by defining the driving frequency of the peripheral (APB1 peripheral clock for I2C1) within the CR2 register (must be the same value put as the APB1 frequency in MHz), set the division rate in the CCR register and set the rising time in the TRISE register. The calculations to get the CCR and TRISE are within the refman.
+
+Of note, we clean the flags within the peripheral by reading the SR registers. Doing so does clean ALL flags, so tread lightly and not accidentally remove flags that should not be cleaned.
 
 ## Conclusion
 Lorem-ipsum.
