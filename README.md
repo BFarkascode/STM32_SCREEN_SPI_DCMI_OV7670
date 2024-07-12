@@ -122,9 +122,9 @@ Timing is done by defining the driving frequency of the peripheral (APB1 periphe
 Of note, we clean the flags within the peripheral by reading the SR registers. Doing so does clean ALL flags, so tread lightly and not accidentally remove flags that should not be cleaned.
 
 ### SPI, DMA, PWM, Clocking
-Thes peripherals are run on code pretty much identical to the L0xx so I won’t be explaining them too deeply.
+These peripherals are run on code pretty much identical to the L0xx so I won’t be explaining them. Merely a few register names and bits need to be changed from the original code.
 
-One thing is that, within this code, I am handling the data flow of the SPI differently just so that I won’t need to change the existing ILI9341 driver: we are publishing single bytes on the SPI bus instead of an array as we did in the L0xx project.
+I am handling the data flow of the SPI differently though so that I won’t need to change the existing ILI9341 driver. The difference is that we are publishing single bytes on the SPI bus instead of an array as we did before.
 
 ## Conclusion
 As mentioned, we are cutting a lot of corners in this project and aren’t using any of the more advanced functions such as DMA2D or TouchGFX. We also have a myriad of while loops that block execution unnecessarily.
